@@ -1,72 +1,54 @@
+
 package com.freefireindia.tournament;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.os.Bundle;
+import android.webkit.*;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Bundle;
-import android.webkit.ValueCallback;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.Toast;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AppCompatActivity;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
 
     private WebView webView;
-    private ValueCallback<Uri[]> mUploadMessage;
-    
-    private final ActivityResultLauncher<Intent> fileChooserLauncher = registerForActivityResult(
-            new ActivityResultContracts.StartActivityForResult(),
-            result -> {
-                if (mUploadMessage == null) return;
-                Uri[] results = null;
-                if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
-                    String dataString = result.getData().getDataString();
-                    if (dataString != null) {
-                        results = new Uri[]{Uri.parse(dataString)};
-                    }
-                }
-                mUploadMessage.onReceiveValue(results);
-                mUploadMessage = null;
-            });
+    private ValueCallback<Uri[]> fileCallback;
+    private static final int FILE_REQUEST = 1001;
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
 
-        webView = findViewById(R.id.webview);
-        WebSettings webSettings = webView.getSettings();
-        webSettings.setJavaScriptEnabled(true);
-        webSettings.setDomStorageEnabled(true);
-        webSettings.setAllowFileAccess(true);
-        webSettings.setAllowContentAccess(true);
-        webSettings.setDatabaseEnabled(true);
+        webView = new WebView(this);
+        setContentView(webView);
+
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
 
         webView.setWebViewClient(new WebViewClient());
+
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-                if (mUploadMessage != null) {
-                    mUploadMessage.onReceiveValue(null);
+            public boolean onShowFileChooser(
+                WebView view,
+                ValueCallback<Uri[]> callback,
+                FileChooserParams params) {
+
+                if (fileCallback != null) {
+                    fileCallback.onReceiveValue(null);
                 }
-                mUploadMessage = filePathCallback;
-                
-                Intent intent = fileChooserParams.createIntent();
+
+                fileCallback = callback;
+
                 try {
-                    fileChooserLauncher.launch(intent);
+                    startActivityForResult(
+                        params.createIntent(), FILE_REQUEST);
+                    return true;
                 } catch (Exception e) {
-                    mUploadMessage = null;
-                    Toast.makeText(MainActivity.this, "Cannot open file chooser", Toast.LENGTH_SHORT).show();
+                    fileCallback = null;
                     return false;
                 }
-                return true;
             }
         });
 
@@ -74,8 +56,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onActivityResult(
+        int requestCode, int resultCode, Intent data) {
+
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == FILE_REQUEST && fileCallback != null) {
+            Uri[] result = WebChromeClient.FileChooserParams
+                .parseResult(resultCode, data);
+            fileCallback.onReceiveValue(result);
+            fileCallback = null;
+        }
+    }
+
+    @Override
     public void onBackPressed() {
-        if (webView.canGoBack()) {
+        if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
             super.onBackPressed();
